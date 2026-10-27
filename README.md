@@ -2,7 +2,13 @@
 
 自建内网导航面板，基于 Next.js 15 App Router 的单端口应用。多用户、多分组，支持内网 / 外网地址自动分流、SMB 共享、RDP 远程桌面、WebDAV / OpenList 文件直链、离线文件和内嵌网页窗口。
 
-所有数据保存在外挂数据目录（默认容器内 `/app/data`），删除或升级容器不会丢数据。
+所有数据保存在独立数据目录（`DATA_DIR`，Linux 部署建议 `/opt/realpanel-data`），升级程序不会丢数据。
+
+## 致谢
+
+本项目基于原作者 [lichong-a](https://github.com/lichong-a) 的开源项目 [navigation_panel](https://github.com/lichong-a/navigation_panel) 二次开发。原项目提供了导航面板的基础框架、视觉风格与交互设计，在此感谢原作者的开源与持续维护。
+
+本仓库是在个人内网场景下的定制分支，主要新增多用户体系、内外网地址分流、WebDAV 挂载、离线文件、SMB / RDP 打开方式等能力，实际部署方式为 **Linux 原生运行（Node.js standalone + systemd）**，不使用 Docker 构建。
 
 ## 功能
 
@@ -31,18 +37,29 @@
 
 完整列表见 [更新日志](CHANGELOG.md)。
 
-## 快速开始（Docker）
+## 快速开始（Linux）
 
-要求 Docker 20.10+、Docker Compose 2.0+。
+交付包是 Next.js standalone 产物，已包含全部运行依赖，服务器上只需装 **Node.js 22**（系统自带的 Node 18 跑不了 Next.js 15），**不需要再执行 `npm install` 或 `pnpm build`**。
 
 ```bash
-# 构建并启动
-docker compose up -d --build
+# 1. 安装 Node.js 22（系统已有 22 可跳过）
+mkdir -p /opt/node
+curl -fsSL https://nodejs.org/dist/v22.20.0/node-v22.20.0-linux-x64.tar.xz -o /tmp/node.tar.xz
+tar -xJf /tmp/node.tar.xz -C /opt/node --strip-components=1
 
-# 查看状态与日志
-docker compose ps
-docker compose logs -f
+# 2. 解压程序
+mkdir -p /opt/realpanel
+tar -xzf realpanel-linux-deploy-<日期>.tar.gz -C /opt/realpanel
+
+# 3. 建数据目录（备份、迁移只需搬这个目录）
+mkdir -p /opt/realpanel-data
+
+# 4. 前台试跑
+cd /opt/realpanel
+PORT=3000 DATA_DIR=/opt/realpanel-data /opt/node/bin/node server.js
 ```
+
+正式使用建议注册成 systemd 常驻服务，unit 文件、Node 安装、防火墙放行等完整步骤见 [安装手册（Linux）](安装手册.md)。
 
 启动后访问：
 
@@ -53,28 +70,16 @@ docker compose logs -f
 
 首次启动数据目录为空，需要先完成 `/setup` 初始化。
 
-### 不用 compose，直接跑
+### 其他部署方式
 
-```bash
-docker build -t realpanel:latest .
+仓库同时提供 `Dockerfile` 与 `docker-compose.yml`，如需容器化可自行构建；本项目实际以 Linux 原生方式运行，容器方式未经长期验证。
 
-docker run -d \
-  --name realpanel \
-  -p 3000:3000 \
-  -v /你的/数据目录:/app/data \
-  -e DATA_DIR=/app/data \
-  -e TZ=Asia/Shanghai \
-  --restart unless-stopped \
-  realpanel:latest
-```
+## 数据目录
 
-## 数据目录必须外挂
+运行时的 `config.json`、用户、面板、图标、离线文件全部写到 `DATA_DIR`，未设置时默认是程序目录下的 `data/`。Linux 部署建议放在独立目录并写进 systemd：
 
-镜像内不包含任何用户数据，运行时的 `config.json`、用户、面板、图标、离线文件全部写到 `/app/data`，必须挂载到宿主机：
-
-```yaml
-volumes:
-  - ./data:/app/data
+```ini
+Environment=DATA_DIR=/opt/realpanel-data
 ```
 
 目录结构：
@@ -90,18 +95,17 @@ data/
 └── files.json           # 离线文件元数据
 ```
 
-- 容器启动时会自动把 `/app/data` 属主修正为容器内用户（uid 1001），宿主机目录无需手动 chown。
-- 如果挂载的是 NFS / SMB 等不允许 chown 的目录，需保证容器用户可写，否则启动日志会给出警告。
-- 备份直接打包整个 `data` 目录，或在「设置 → 导入导出」导出 JSON / ZIP（不含 JWT 密钥）。
+- 运行服务的系统用户必须对数据目录有写权限，必要时执行 `chown -R <运行用户> /opt/realpanel-data`。
+- 备份直接打包整个数据目录，或在「设置 → 导入导出」导出 JSON / ZIP（不含 JWT 密钥）。
 
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `PORT` | `3000` | 监听端口 |
-| `DATA_DIR` | `/app/data` | 数据目录，容器内保持 `/app/data` 并外挂 |
+| `DATA_DIR` | `./data` | 数据目录，Linux 部署建议指向 `/opt/realpanel-data` |
 | `TZ` | 系统时区 | 时区，建议 `Asia/Shanghai` |
-| `NODE_ENV` | `production` | 运行环境，镜像内已固定 |
+| `NODE_ENV` | `production` | 运行环境，生产部署固定为 `production` |
 
 ## 反向代理
 
@@ -165,9 +169,9 @@ PORT=3000 node server.js
 - [安装手册（Linux）](安装手册.md)
 - [更新日志](CHANGELOG.md)
 - [需求与变更记录](需求与变更记录.md)
-- [部署文档](docs/deployment.md)
 - [常见问题](docs/faq.md)
+- [部署文档（Docker，原项目遗留）](docs/deployment.md)
 
 ## License
 
-基于开源项目 [navigation_panel](https://github.com/lichong-a/navigation_panel) 定制，遵循 MIT License。
+本项目基于原作者 [lichong-a](https://github.com/lichong-a) 的开源项目 [navigation_panel](https://github.com/lichong-a/navigation_panel) 二次开发，遵循 MIT License，原项目版权归原作者所有。
