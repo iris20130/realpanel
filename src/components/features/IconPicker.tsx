@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Button, Input } from '@/components/ui'
 import { Icon } from '@/components/icons/Icon'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/lib/api'
+import { WebDavPicker } from './WebDavPicker'
 import type { SiteIcon } from '@/types'
-import { Upload, Globe, Search, Loader2 } from 'lucide-react'
+import { Upload, Globe, Search, Loader2, HardDrive, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 interface IconPickerProps {
@@ -14,7 +15,7 @@ interface IconPickerProps {
   onChange: (icon: SiteIcon) => void
 }
 
-type TabType = 'upload' | 'favicon' | 'iconify'
+type TabType = 'upload' | 'favicon' | 'iconify' | 'webdav'
 
 export function IconPicker({ value, onChange }: IconPickerProps) {
   const { token } = useAuthStore()
@@ -24,7 +25,16 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
   const [searchResults, setSearchResults] = useState<string[]>([])
   const [hasSearched, setHasSearched] = useState(false)
   const [faviconUrl, setFaviconUrl] = useState('')
+  const [webdavReady, setWebdavReady] = useState(false)
+  const [showWebdav, setShowWebdav] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    api.webdav
+      .status()
+      .then((status) => setWebdavReady(status.enabled))
+      .catch(() => setWebdavReady(false))
+  }, [])
 
   // 预设图标
   const presetIcons = [
@@ -136,6 +146,7 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
           { key: 'iconify', label: 'Iconify', icon: Search },
           { key: 'upload', label: '上传', icon: Upload },
           { key: 'favicon', label: 'Favicon', icon: Globe },
+          ...(webdavReady ? [{ key: 'webdav', label: 'WebDAV', icon: HardDrive }] : []),
         ].map((tab) => (
           <button
             key={tab.key}
@@ -247,6 +258,38 @@ export function IconPicker({ value, onChange }: IconPickerProps) {
           </p>
         </div>
       )}
+
+      {/* WebDAV 挂载图片 */}
+      {activeTab === 'webdav' && (
+        <div className="space-y-3">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setShowWebdav(true)}
+            className="w-full justify-center gap-1.5"
+          >
+            <HardDrive size={16} />
+            浏览挂载目录选择图片
+            <ArrowRight size={14} />
+          </Button>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            从管理员配置的 WebDAV（如 OpenList）目录里直接选一张图片作为图标，服务端会代理图片并带上认证。
+          </p>
+        </div>
+      )}
+
+      <WebDavPicker
+        open={showWebdav}
+        mode="icon"
+        onClose={() => setShowWebdav(false)}
+        onSelect={(entry) => {
+          onChange({
+            type: 'favicon',
+            value: `/api/webdav/raw?path=${encodeURIComponent(entry.path)}`,
+          })
+          setShowWebdav(false)
+        }}
+      />
     </div>
   )
 }

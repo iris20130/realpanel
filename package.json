@@ -1,5 +1,5 @@
 {
-  "name": "navigation-panel",
+  "name": "realpanel",
   "version": "1.0.0",
   "private": true,
   "repository": {
@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js",
     "lint": "next lint"
   },
   "dependencies": {

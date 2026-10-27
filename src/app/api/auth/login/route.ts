@@ -4,23 +4,26 @@ import { isInitialized } from '@/lib/db'
 
 export async function POST(request: Request) {
   try {
-    const initialized = await isInitialized()
-    if (!initialized) {
-      return NextResponse.json({ success: false, error: 'Not initialized' }, { status: 400 })
+    if (!(await isInitialized())) {
+      return NextResponse.json({ error: '系统尚未初始化' }, { status: 400 })
     }
 
     const body = await request.json()
-    const { username, password } = body
+    const username = String(body.username ?? '')
+    const password = String(body.password ?? '')
 
-    const result = await login(username, password)
-
-    if (!result.success) {
-      return NextResponse.json({ success: false, error: result.error }, { status: 401 })
+    if (!username || !password) {
+      return NextResponse.json({ error: '请输入用户名和密码' }, { status: 400 })
     }
 
-    return NextResponse.json({ token: result.token })
+    const result = await login(username, password)
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 401 })
+    }
+
+    return NextResponse.json({ token: result.token, user: result.user })
   } catch (error) {
     console.error('Login error:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: '登录失败' }, { status: 500 })
   }
 }

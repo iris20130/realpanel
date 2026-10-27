@@ -3,13 +3,18 @@
 import { useState } from 'react'
 import { useSettingsStore } from '@/stores/settings'
 import { useAuthStore } from '@/stores/auth'
+import { useUiStore } from '@/stores/ui'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
+import { useEffectStore } from '@/stores/effect'
+import { EFFECTS } from '@/lib/effects'
+import { useNetwork, networkLabels, networkModeLabels } from '@/lib/network'
+import { useBranding } from '@/lib/useBranding'
+import { BrandMark } from '@/components/layout/BrandMark'
+import { NicSelector } from '@/components/layout/NicSelector'
 import { Button } from '@/components/ui'
-import { Globe, Wifi, User, LogOut, Settings, Sun, Moon, Monitor, Github } from 'lucide-react'
-import { LoginDialog } from '@/components/features/LoginDialog'
+import { Globe, Wifi, Radar, User, LogOut, LogIn, Settings, Sun, Moon, Monitor, Pencil, Check, Eye, Sparkles, LayoutGrid } from 'lucide-react'
 import { SettingsDialog } from '@/components/features/SettingsDialog'
-
-const GITHUB_URL = 'https://github.com/lichong-a/navigation_panel'
+import { cn } from '@/lib/utils'
 
 const themeConfig: Record<ThemeMode, { icon: typeof Sun; label: string }> = {
   dark: { icon: Moon, label: '暗色模式' },
@@ -17,20 +22,48 @@ const themeConfig: Record<ThemeMode, { icon: typeof Sun; label: string }> = {
   system: { icon: Monitor, label: '跟随系统' },
 }
 
-export function Header() {
-  const { networkMode, setNetworkMode } = useSettingsStore()
-  const { isLoggedIn, logout } = useAuthStore()
-  const mode = useThemeStore((state) => state.mode)
+export function Header({
+  guest = false,
+  onMemberLogin,
+}: {
+  guest?: boolean
+  onMemberLogin?: () => void
+}) {
+  const { mode, network, deviceIp, deviceIps, probing, detected } = useNetwork()
+  const cycleNetworkMode = useSettingsStore((state) => state.cycleNetworkMode)
+  const setNetworkMode = useSettingsStore((state) => state.setNetworkMode)
+  const { user, logout } = useAuthStore()
+  const { editing, setEditing, viewingUser, setViewingUser } = useUiStore()
+  const themeMode = useThemeStore((state) => state.mode)
   const cycleMode = useThemeStore((state) => state.cycleMode)
-  const [showLogin, setShowLogin] = useState(false)
+  const effectMode = useEffectStore((state) => state.mode)
+  const fixedEffectId = useEffectStore((state) => state.fixedId)
+  const cycleEffect = useEffectStore((state) => state.cycleEffect)
+  const branding = useBranding()
   const [showSettings, setShowSettings] = useState(false)
+
+  const openAdmin = () => {
+    window.location.href = '/admin'
+  }
+
+  const currentTheme = themeConfig[themeMode]
+  const ThemeIcon = currentTheme.icon
+
+  const networkLabel =
+    mode === 'auto'
+      ? `自动 · ${networkLabels[network]}`
+      : mode === 'all'
+        ? '全部显示'
+        : networkModeLabels[mode]
+  const NetworkIcon = mode === 'auto' ? Radar : mode === 'intranet' ? Wifi : mode === 'all' ? LayoutGrid : Globe
+  const effectLabel =
+    effectMode === 'random'
+      ? '随机'
+      : EFFECTS.find((effect) => effect.id === fixedEffectId)?.name || '默认'
 
   const handleLogout = () => {
     logout()
   }
-
-  const currentTheme = themeConfig[mode]
-  const ThemeIcon = currentTheme.icon
 
   return (
     <>
@@ -38,30 +71,50 @@ export function Header() {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-14 sm:h-16">
             {/* Logo */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="relative group">
-                <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)] to-purple-600 rounded-lg blur opacity-50 group-hover:opacity-75 transition-opacity" />
-                <div className="relative w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br from-[var(--color-primary)] to-purple-600 flex items-center justify-center shadow-lg">
-                  <span className="text-white font-bold text-lg sm:text-xl tracking-tight">R</span>
-                </div>
-              </div>
-              <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-[var(--color-text)] to-[var(--color-text-muted)] bg-clip-text text-transparent">
-                RicPanel
-              </span>
-            </div>
+            {branding.mode !== 'none' && (
+              <button
+                type="button"
+                onClick={() => viewingUser && setViewingUser(null)}
+                title={viewingUser ? '返回我的面板' : branding.text}
+                className="flex items-center gap-2 sm:gap-3 min-w-0"
+              >
+                <BrandMark
+                  branding={branding}
+                  imageClassName="h-6 sm:h-7"
+                  textClassName="text-lg sm:text-xl truncate max-w-56"
+                />
+              </button>
+            )}
 
             {/* 右侧操作区 */}
-            <div className="flex items-center gap-1 sm:gap-3">
-              {/* GitHub */}
-              <a
-                href={GITHUB_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="GitHub"
-                className="inline-flex items-center justify-center rounded-lg font-medium transition-all duration-200 bg-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-surface)] p-1.5 sm:p-2"
+            <div className="flex items-center gap-1 sm:gap-2">
+              {/* 网卡选择：先选网卡，再做内外网识别 */}
+              <NicSelector />
+
+              {/* 网络强制切换：自动 -> 强制内网 -> 强制外网 */}
+              <button
+                type="button"
+                onClick={cycleNetworkMode}
+                title={`当前：${networkLabel}${deviceIps.length > 0 ? `（本机 IP ${deviceIps.join('、')}）` : deviceIp ? `（本机 IP ${deviceIp}）` : ''}${probing ? '，正在识别网络…' : mode === 'auto' ? `，检测结果：${networkLabels[detected]}` : ''}。点击切换：自动识别 → 强制内网 → 强制外网`}
+                className={cn(
+                  'network-badge flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-medium text-white transition-all hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer',
+                  mode
+                )}
               >
-                <Github size={18} />
-              </a>
+                <NetworkIcon size={14} className="sm:w-4 sm:h-4" />
+                <span className="hidden sm:inline">{networkLabel}</span>
+              </button>
+
+              {/* 强制全部显示：不受内外网筛选影响 */}
+              <Button
+                variant={mode === 'all' ? 'primary' : 'ghost'}
+                size="sm"
+                onClick={() => setNetworkMode(mode === 'all' ? 'auto' : 'all')}
+                className="p-1.5 sm:p-2"
+                title={mode === 'all' ? '取消全部显示，恢复自动识别' : '全部显示（同时展示内网与外网链接）'}
+              >
+                <LayoutGrid size={18} />
+              </Button>
 
               {/* 主题切换 */}
               <Button
@@ -74,68 +127,128 @@ export function Header() {
                 <ThemeIcon size={18} />
               </Button>
 
-              {/* 网络模式切换 - 手机端只显示图标 */}
-              <button
-                onClick={() => setNetworkMode(networkMode === 'public' ? 'private' : 'public')}
-                title={networkMode === 'public' ? '公网' : '内网'}
-                className={`network-badge ${networkMode} flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium text-white transition-all hover:opacity-90 hover:scale-105 active:scale-95 cursor-pointer`}
-              >
-                {networkMode === 'public' ? (
+              {/* 背景效果：随机 → 四套效果循环 */}
+              {user && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={cycleEffect}
+                  className="p-1.5 sm:p-2"
+                  title={`背景效果：${effectLabel}（点击切换）`}
+                >
+                  <Sparkles size={18} />
+                </Button>
+              )}
+
+              {guest &&
+                (user ? (
                   <>
-                    <Globe size={14} className="sm:w-4 sm:h-4" />
-                    <span className="hidden sm:inline">公网</span>
+                    <div className="hidden sm:flex items-center gap-2 pl-2 ml-1 border-l border-[var(--color-border)]">
+                      <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/20 text-[var(--color-primary)] flex items-center justify-center text-xs font-semibold">
+                        {user.username.slice(0, 1).toUpperCase()}
+                      </div>
+                      <span className="text-sm font-medium text-[var(--color-text)] max-w-28 truncate">
+                        {user.username}
+                      </span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={openAdmin}
+                      className="gap-1.5 p-2 sm:px-3"
+                      title="进入管理面板（编辑、设置、添加分组）"
+                    >
+                      <Settings size={18} />
+                      <span className="hidden sm:inline">管理</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleLogout}
+                      className="p-1.5 sm:p-2"
+                      title="退出登录"
+                    >
+                      <LogOut size={18} />
+                    </Button>
                   </>
                 ) : (
-                  <>
-                    <Wifi size={14} className="sm:w-4 sm:h-4" />
-                    <span className="hidden sm:inline">内网</span>
-                  </>
-                )}
-              </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={onMemberLogin}
+                    className="gap-1.5 p-2 sm:px-3"
+                    title="成员登录"
+                  >
+                    <LogIn size={16} />
+                    <span className="hidden sm:inline">成员登录</span>
+                  </Button>
+                ))}
 
-              {/* 用户操作 - 手机端只显示图标 */}
-              {isLoggedIn ? (
-                <div className="flex items-center gap-1 sm:gap-2">
+              {!guest && (
+                <>
+                  {viewingUser ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setViewingUser(null)}
+                      className="gap-1.5 p-1.5 sm:px-3"
+                      title="返回我的面板"
+                    >
+                      <Eye size={16} />
+                      <span className="hidden sm:inline">只读查看中</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant={editing ? 'primary' : 'ghost'}
+                      size="sm"
+                      onClick={() => setEditing(!editing)}
+                      className="p-1.5 sm:p-2 sm:gap-1.5"
+                      title={editing ? '完成编辑' : '编辑面板'}
+                    >
+                      {editing ? <Check size={18} /> : <Pencil size={18} />}
+                      <span className="hidden sm:inline">{editing ? '完成' : '编辑'}</span>
+                    </Button>
+                  )}
+
+                  {/* 用户 */}
+                  <div className="hidden md:flex items-center gap-2 pl-2 ml-1 border-l border-[var(--color-border)]">
+                    <div className="w-7 h-7 rounded-full bg-[var(--color-primary)]/20 text-[var(--color-primary)] flex items-center justify-center text-xs font-semibold">
+                      {user?.username?.slice(0, 1).toUpperCase() || <User size={14} />}
+                    </div>
+                    <div className="leading-tight">
+                      <p className="text-sm font-medium text-[var(--color-text)] max-w-32 truncate">{user?.username}</p>
+                      <p className="text-[10px] text-[var(--color-text-muted)]">
+                        {user?.role === 'admin' ? '管理员' : '普通用户'}
+                      </p>
+                    </div>
+                  </div>
+
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => setShowSettings(true)}
-                    className="p-1.5 sm:p-2 sm:gap-2"
-                    title="管理"
+                    className="p-1.5 sm:p-2"
+                    title="设置"
                   >
                     <Settings size={18} />
-                    <span className="hidden sm:inline">管理</span>
                   </Button>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={handleLogout} 
-                    className="p-1.5 sm:p-2 sm:gap-2"
-                    title="退出"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="p-1.5 sm:p-2"
+                    title="退出登录"
                   >
                     <LogOut size={18} />
-                    <span className="hidden sm:inline">退出</span>
                   </Button>
-                </div>
-              ) : (
-                <Button 
-                  variant="secondary" 
-                  size="sm" 
-                  onClick={() => setShowLogin(true)} 
-                  className="p-1.5 sm:p-2 sm:gap-2"
-                  title="登录"
-                >
-                  <User size={18} />
-                  <span className="hidden sm:inline">登录</span>
-                </Button>
+                </>
               )}
             </div>
           </div>
         </div>
       </header>
 
-      <LoginDialog open={showLogin} onClose={() => setShowLogin(false)} />
-      <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />
+      {!guest && <SettingsDialog open={showSettings} onClose={() => setShowSettings(false)} />}
     </>
   )
 }

@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+; Register smb:// handler for current user (no admin required).
+; smb://192.168.1.10/share -> \\192.168.1.10\share in Explorer.
+; Undo with disable-smb-protocol.reg
+
+[HKEY_CURRENT_USER\Software\Classes\smb]
+@="URL:SMB Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\smb\shell\open\command]
+@="powershell.exe -NoProfile -WindowStyle Hidden -Command \"$u='%1'; $p='\\\\' + ($u -replace '^smb:(//)?','' -replace '/','\\'); Start-Process explorer.exe -ArgumentList $p\""

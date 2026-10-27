@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { X, ExternalLink, AlertCircle } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { X, ExternalLink, AlertCircle, Maximize2, Minimize2, Minus } from 'lucide-react'
 import { Button } from '@/components/ui'
+import { cn } from '@/lib/utils'
 
 interface IframeModalProps {
   open: boolean
@@ -14,10 +15,17 @@ interface IframeModalProps {
 
 export function IframeModal({ open, onClose, url, title }: IframeModalProps) {
   const [loadError, setLoadError] = useState(false)
+  const [maximized, setMaximized] = useState(false)
+  const [minimized, setMinimized] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (open) {
       setLoadError(false)
+      setMaximized(false)
+      setMinimized(false)
     }
   }, [open, url])
 
@@ -28,57 +36,121 @@ export function IframeModal({ open, onClose, url, title }: IframeModalProps) {
     }
     if (open) {
       window.addEventListener('keydown', handleEsc)
-      document.body.style.overflow = 'hidden'
+      if (!minimized) document.body.style.overflow = 'hidden'
     }
     return () => {
       window.removeEventListener('keydown', handleEsc)
       document.body.style.overflow = ''
     }
-  }, [open, onClose])
+  }, [open, minimized, onClose])
 
   const handleOpenInNewTab = () => {
     window.open(url, '_blank')
     onClose()
   }
 
-  return (
-    <AnimatePresence>
+  if (!mounted) return null
+
+  return createPortal(
+    <>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div
+          className={cn(
+            'fixed inset-0 flex',
+            minimized ? 'z-40 items-end justify-end p-3 pointer-events-none' : 'z-50 items-center justify-center'
+          )}
+        >
           {/* 遮罩 */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-            onClick={onClose}
-          />
+          {!minimized && (
+            <div
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+              onClick={onClose}
+            />
+          )}
 
           {/* 内容 */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            className="relative w-[95vw] h-[90vh] max-w-7xl bg-[#1a1a2e] rounded-xl overflow-hidden shadow-2xl border border-[var(--color-border)]"
+          <div
+            className={cn(
+              'relative flex flex-col overflow-hidden bg-[#1a1a2e] shadow-2xl border border-[var(--color-border)] pointer-events-auto',
+              minimized
+                ? 'h-11 w-72 rounded-lg'
+                : maximized
+                  ? 'fixed inset-0 w-screen h-screen rounded-none'
+                  : 'w-[95vw] h-[90vh] max-w-7xl rounded-xl'
+            )}
           >
             {/* 头部 */}
-            <div className="absolute top-0 left-0 right-0 h-12 bg-[#1a1a2e]/90 backdrop-blur-sm border-b border-[var(--color-border)] flex items-center justify-between px-4 z-10">
-              <span className="text-sm font-medium text-[var(--color-text)] truncate flex-1 mr-4">
+            <div
+              className={cn(
+                'shrink-0 bg-[#1a1a2e]/95 backdrop-blur-sm flex items-center justify-between gap-2 px-3 sm:px-4',
+                minimized ? 'h-full border-0' : 'h-12 border-b border-[var(--color-border)]'
+              )}
+              onDoubleClick={() => !minimized && setMaximized((v) => !v)}
+            >
+              <button
+                type="button"
+                onClick={() => minimized && setMinimized(false)}
+                className="text-sm font-medium text-[var(--color-text)] truncate flex-1 text-left"
+                title={minimized ? '点击还原窗口' : title}
+              >
                 {title}
-              </span>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={handleOpenInNewTab} className="gap-1.5">
-                  <ExternalLink size={16} />
-                  新窗口打开
-                </Button>
-                <Button variant="ghost" size="sm" onClick={onClose} className="p-1.5">
-                  <X size={20} />
-                </Button>
+              </button>
+              <div className="flex items-center gap-1">
+                {minimized ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMinimized(false)}
+                      className="p-1.5"
+                      title="还原窗口"
+                    >
+                      <Maximize2 size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={onClose} className="p-1.5" title="关闭">
+                      <X size={18} />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleOpenInNewTab}
+                      className="gap-1.5"
+                      title="在新窗口打开"
+                    >
+                      <ExternalLink size={16} />
+                      <span className="hidden sm:inline">新窗口</span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMaximized((v) => !v)}
+                      className="p-1.5"
+                      title={maximized ? '退出全屏' : '全屏'}
+                    >
+                      {maximized ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setMinimized(true)}
+                      className="p-1.5"
+                      title="最小化"
+                    >
+                      <Minus size={16} />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={onClose} className="p-1.5" title="关闭">
+                      <X size={18} />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
 
             {/* iframe 或错误提示 */}
-            <div className="pt-12 w-full h-full">
+            <div className={cn('flex-1 min-h-0 w-full', minimized && 'hidden')}>
               {loadError ? (
                 <div className="w-full h-full flex flex-col items-center justify-center gap-4 text-center p-8">
                   <AlertCircle size={48} className="text-[var(--color-warning)]" />
@@ -98,16 +170,17 @@ export function IframeModal({ open, onClose, url, title }: IframeModalProps) {
               ) : (
                 <iframe
                   src={url}
-                  className="w-full h-full border-0"
+                  className="w-full h-full border-0 bg-white"
                   title={title}
                   onError={() => setLoadError(true)}
-                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
                 />
               )}
             </div>
-          </motion.div>
+          </div>
         </div>
       )}
-    </AnimatePresence>
+    </>,
+    document.body
   )
 }

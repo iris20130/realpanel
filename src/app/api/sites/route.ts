@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
-import { readSites } from '@/lib/db'
+import { verifyAuth } from '@/lib/auth'
+import { readPanel } from '@/lib/db'
+import { withWebdavProxyUrls } from '@/lib/webdavProxy'
 
-export async function GET() {
-  try {
-    const data = await readSites()
-    return NextResponse.json(data)
-  } catch (error) {
-    console.error('Get sites error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+export async function GET(request: Request) {
+  const user = await verifyAuth(request)
+  if (!user) {
+    return NextResponse.json({ error: '未登录或登录已过期' }, { status: 401 })
   }
+
+  const panel = await withWebdavProxyUrls(await readPanel(user.id))
+  return NextResponse.json(panel)
 }

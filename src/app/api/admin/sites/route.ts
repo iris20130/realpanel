@@ -1,92 +1,93 @@
 import { NextResponse } from 'next/server'
 import { verifyAuth } from '@/lib/auth'
-import { readSites, writeSites } from '@/lib/db'
-import type { Site, SiteIcon, OpenMode } from '@/types'
-import { generateId, getCurrentTimestamp } from '@/lib/utils'
+import { readPanel, withDataLock, writePanel } from '@/lib/db'
+import type { NetworkScope, OpenMode, Site, SiteIcon, SiteVisibility } from '@/types'
+import { generateId, getCurrentTimestamp, normalizeUrlInput } from '@/lib/utils'
+import { normalizeSiteVisibility, normalizeUserIds } from '@/lib/visibility'
+import { withWebdavProxySite, withWebdavProxyUrls } from '@/lib/webdavProxy'
 
-interface CreateSiteBody {
-  groupId: string
-  title: string
+interface SiteBody {
+  groupId?: string
+  title?: string
   description?: string
-  icon: SiteIcon
-  publicUrl: string
-  privateUrl?: string
-  openMode: OpenMode
+  notice?: string
+  icon?: SiteIcon
+  externalUrl?: string
+  internalUrl?: string
+  networkScope?: NetworkScope
+  openMode?: OpenMode
   tags?: string[]
+  visibility?: SiteVisibility
+  visibleUserIds?: string[]
   enabled?: boolean
 }
 
-// 获取所有网站
-export async function GET(request: Request) {
-  const user = await verifyAuth(request)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  try {
-    const data = await readSites()
-    const sites = data.sites.sort((a, b) => {
-      if (a.groupId !== b.groupId) {
-        return a.groupId.localeCompare(b.groupId)
-      }
-      return a.order - b.order
-    })
-    return NextResponse.json(sites)
-  } catch (error) {
-    console.error('Get sites error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+function normalizeScope(value: unknown): NetworkScope {
+  return value === 'both' || value === 'intranet' || value === 'internet' ? value : 'auto'
 }
 
-// 创建网站
+export async function GET(request: Request) {
+  const user = await verifyAuth(request)
+  if (!user) return NextResponse.json({ error: '未登录' }, { status: 401 })
+
+  const data = await readPanel(user.id)
+  const panel = await withWebdavProxyUrls(data)
+  return NextResponse.json(panel.sites)
+}
+
 export async function POST(request: Request) {
   const user = await verifyAuth(request)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!user) return NextResponse.json({ error: '未登录' }, { status: 401 })
 
-  try {
-    const body: CreateSiteBody = await request.json()
-    const { groupId, title, description, icon, publicUrl, privateUrl, openMode, tags, enabled } = body
+  return withDataLock(async () => {
+    try {
+      const body = (await request.json()) as SiteBody
+      const title = String(body.title ?? '').trim()
+      const groupId = String(body.groupId ?? '')
+      const externalUrl = normalizeUrlInput(body.externalUrl)
+      const internalUrl = normalizeUrlInput(body.internalUrl)
 
-    if (!groupId || !title || !icon || !publicUrl || !openMode) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+      if (!title) return NextResponse.json({ error: '请填写网站标题' }, { status: 400 })
+      if (!groupId) return NextResponse.json({ error: '请选择分组' }, { status: 400 })
+      if (!externalUrl && !internalUrl) {
+        return NextResponse.json({ error: '内网地址和外网地址至少填写一个' }, { status: 400 })
+      }
+
+      const data = await readPanel(user.id)
+      if (!data.groups.some((group) => group.id === groupId)) {
+        return NextResponse.json({ error: '分组不存在' }, { status: 400 })
+      }
+
+      const groupSites = data.sites.filter((site) => site.groupId === groupId)
+      const maxOrder = Math.max(0, ...groupSites.map((site) => site.order))
+      const now = getCurrentTimestamp()
+
+      const site: Site = {
+        id: generateId(),
+        groupId,
+        title,
+        description: body.description?.trim() || undefined,
+        notice: body.notice?.trim().slice(0, 500) || undefined,
+        icon: body.icon ?? { type: 'iconify', value: 'mdi:web' },
+        externalUrl,
+        internalUrl,
+        networkScope: normalizeScope(body.networkScope),
+        openMode: body.openMode === 'current' || body.openMode === 'modal' ? body.openMode : 'blank',
+        tags: Array.isArray(body.tags) ? body.tags.map(String).filter(Boolean) : [],
+        visibility: normalizeSiteVisibility(body.visibility),
+        visibleUserIds: normalizeUserIds(body.visibleUserIds),
+        enabled: body.enabled !== false,
+        order: maxOrder + 1,
+        createdAt: now,
+        updatedAt: now,
+      }
+
+      data.sites.push(site)
+      await writePanel(user.id, data)
+      return NextResponse.json(await withWebdavProxySite(site))
+    } catch (error) {
+      console.error('Create site error:', error)
+      return NextResponse.json({ error: '创建网站失败' }, { status: 500 })
     }
-
-    const data = await readSites()
-
-    // 检查分组是否存在
-    const group = data.groups.find(g => g.id === groupId)
-    if (!group) {
-      return NextResponse.json({ error: 'Group not found' }, { status: 400 })
-    }
-
-    // 获取该分组内最大 order
-    const groupSites = data.sites.filter(s => s.groupId === groupId)
-    const maxOrder = Math.max(0, ...groupSites.map(s => s.order))
-
-    const newSite: Site = {
-      id: generateId(),
-      groupId,
-      title: title.trim(),
-      description: description?.trim(),
-      icon,
-      publicUrl: publicUrl.trim(),
-      privateUrl: privateUrl?.trim(),
-      openMode,
-      tags: tags || [],
-      enabled: enabled !== false,
-      order: maxOrder + 1,
-      createdAt: getCurrentTimestamp(),
-      updatedAt: getCurrentTimestamp(),
-    }
-
-    data.sites.push(newSite)
-    await writeSites(data)
-
-    return NextResponse.json(newSite)
-  } catch (error) {
-    console.error('Create site error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  })
 }

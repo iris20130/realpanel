@@ -1,59 +1,173 @@
-# RicPanel
+# realpanel 导航面板
 
-<div align="center">
+自建内网导航面板，基于 Next.js 15 App Router 的单端口应用。多用户、多分组，支持内网 / 外网地址自动分流、SMB 共享、RDP 远程桌面、WebDAV / OpenList 文件直链、离线文件和内嵌网页窗口。
 
-**极简 · 高性能 · 零依赖**
+所有数据保存在外挂数据目录（默认容器内 `/app/data`），删除或升级容器不会丢数据。
 
-一个现代化的个人导航面板
+## 功能
 
-[![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
-[![React](https://img.shields.io/badge/React-19-61dafb?logo=react)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript)](https://www.typescriptlang.org/)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ed?logo=docker)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+| 分类 | 说明 |
+| --- | --- |
+| 导航与分组 | 站点卡片、自定义分组、拖拽排序、跨分组拖动、桌面端分组按 8 列合并排版、手机端分组抽屉 |
+| 内外网 | 每个站点可填内网 / 外网地址，按访客所在网段自动选择；顶栏可切自动 / 强制内网 / 强制外网 / 全部显示 |
+| 打开方式 | 当前页、新标签页、内嵌弹窗（可全屏 / 最小化）、SMB 共享、`rdp://` 远程桌面 |
+| 点击确认 | 站点可自定义点击提示，填写后点击卡片先弹居中确认框，点「确认打开」才执行打开或下载 |
+| WebDAV | 挂载 OpenList 等 WebDAV，直接选文件生成面板代理直链；内网由面板带账号取文件，外网 302 到反代直链 |
+| 访问地址 | 配置面板的内网地址与反代地址，上传离线文件或选 WebDAV 文件时自动拼出内外网链接 |
+| 离线文件 | 上传 html / svg / 图片等，按 `面板地址/文件名` 访问，可内联展示或下载 |
+| 图标 | Iconify 搜索、favicon 自动识别、上传图片、WebDAV 选图 |
+| 多用户 | 邀请码注册、用户启用 / 禁用 / 改密 / 改角色、每位用户独立面板、分组与站点可见范围 |
+| 外观 | 品牌图标 / 文字切换、favicon 自定义、暗色 / 亮色 / 跟随系统、4 套动态背景 |
+| 备份 | 管理员 JSON / ZIP 全量导出导入，成员仅导出本人面板 |
 
-</div>
+## 新特性（v1.0.0）
 
----
+- 多用户 + 邀请码注册，每人独立面板，分组 / 站点可见范围可控
+- 内网 / 外网地址自动分流，顶栏可切自动、强制内网、强制外网、全部显示
+- SMB 共享与 `rdp://` 远程桌面，支持下载 `.reg` / `.rdp` 文件
+- WebDAV / OpenList 挂载，签名直链 + 内外网通道，外网走 302 不占面板带宽
+- 面板访问地址配置，选文件自动生成内网 / 外网两条链接
+- 离线文件、品牌与主题、JSON / ZIP 全量备份
 
-## ✨ 特性
+完整列表见 [更新日志](CHANGELOG.md)。
 
-| 特性 | 说明 |
-|------|------|
-| 🚀 **高性能** | 服务端内存缓存，零重复 IO，毫秒级响应 |
-| 🪶 **轻量级** | Docker 镜像仅 ~150MB，无数据库依赖 |
-| 🔒 **零中间件** | 无需 Redis/MySQL/MongoDB，JSON 文件存储 |
-| 🎨 **3D 动效** | Three.js 粒子背景，Framer Motion 流畅动画 |
-| 📱 **响应式** | 完美适配桌面端与移动端 |
-| 🌓 **多主题** | 支持暗色/亮色/跟随系统三种模式 |
-| 🔄 **内外网** | 一键切换公网/内网地址 |
-| 📦 **数据迁移** | 一键导入导出，备份无忧 |
+## 快速开始（Docker）
 
-## 🛠️ 快速开始
+要求 Docker 20.10+、Docker Compose 2.0+。
 
 ```bash
-# Docker（推荐）
-docker run -d -p 3000:3000 -v $(pwd)/data:/app/data lc1025082182/ricpanel:latest
+# 构建并启动
+docker compose up -d --build
 
-# 或本地运行
-pnpm install && pnpm build && pnpm start
+# 查看状态与日志
+docker compose ps
+docker compose logs -f
 ```
 
-访问 `http://localhost:3000`，首次进入设置管理员账户即可使用。
+启动后访问：
 
-## 📖 文档
+- 面板首页：`http://<服务器IP>:3000`
+- 首次初始化：`http://<服务器IP>:3000/setup`（创建管理员账号）
+- 登录 / 注册：`http://<服务器IP>:3000/login`
+- 管理面板：`http://<服务器IP>:3000/admin`（`/portal` 为兼容别名）
 
-- [部署文档](docs/deployment.md) - Docker / PM2 部署指南
-- [常见问题](docs/faq.md) - 问题排查
+首次启动数据目录为空，需要先完成 `/setup` 初始化。
 
-## 📄 License
+### 不用 compose，直接跑
 
-[MIT](LICENSE)
+```bash
+docker build -t realpanel:latest .
 
----
+docker run -d \
+  --name realpanel \
+  -p 3000:3000 \
+  -v /你的/数据目录:/app/data \
+  -e DATA_DIR=/app/data \
+  -e TZ=Asia/Shanghai \
+  --restart unless-stopped \
+  realpanel:latest
+```
 
-<div align="center">
+## 数据目录必须外挂
 
-**[GitHub](https://github.com/lichong-a/navigation_panel)** · Star ⭐ 支持
+镜像内不包含任何用户数据，运行时的 `config.json`、用户、面板、图标、离线文件全部写到 `/app/data`，必须挂载到宿主机：
 
-</div>
+```yaml
+volumes:
+  - ./data:/app/data
+```
+
+目录结构：
+
+```
+data/
+├── config.json          # 初始化状态、JWT 密钥、品牌设置、WebDAV 配置
+├── users.json           # 用户账号（密码为 bcrypt 哈希）
+├── invites.json         # 邀请码
+├── panels/<userId>.json # 每位用户的分组与站点
+├── uploads/             # 上传的站点图标 / 品牌图
+├── files/               # 离线文件
+└── files.json           # 离线文件元数据
+```
+
+- 容器启动时会自动把 `/app/data` 属主修正为容器内用户（uid 1001），宿主机目录无需手动 chown。
+- 如果挂载的是 NFS / SMB 等不允许 chown 的目录，需保证容器用户可写，否则启动日志会给出警告。
+- 备份直接打包整个 `data` 目录，或在「设置 → 导入导出」导出 JSON / ZIP（不含 JWT 密钥）。
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `PORT` | `3000` | 监听端口 |
+| `DATA_DIR` | `/app/data` | 数据目录，容器内保持 `/app/data` 并外挂 |
+| `TZ` | 系统时区 | 时区，建议 `Asia/Shanghai` |
+| `NODE_ENV` | `production` | 运行环境，镜像内已固定 |
+
+## 反向代理
+
+面板会读取访客 IP 判断是否与站点内网地址同网段（IPv4 按 /24，IPv6 按 /64）。经反向代理访问时，请务必透传真实客户端 IP：
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Caddy：
+
+```
+nav.example.com {
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+代理不透传客户端 IP 时，内外网可能判断不准，可在顶栏「网卡选择」里手动补充本机地址。
+
+## SMB / RDP 协议
+
+- SMB 地址（`\\host\share`、`smb://host/share`）点击时调用系统 `smb://` 协议打开资源管理器，并复制 UNC 路径。
+- RDP 地址（`rdp://host:port`）点击时调用 `mstsc`，右键还可下载 `.rdp` 连接文件。
+- 浏览器不能直接写注册表。「设置 → 导入导出」提供协议注册文件下载，需用户自行下载后双击导入（仅写 `HKCU`，无需管理员权限）。
+
+## WebDAV / OpenList
+
+在「设置 → WebDAV 挂载」填写内网地址、外网 / 反代地址和账号密码后：
+
+- 「从 WebDAV 选择」选出的文件会生成相对直链 `/api/webdav/file?path=…&sig=…&via=…`，由服务端带 Basic 认证取文件，浏览器不再弹登录框。
+- 内网链接带 `via=internal`，优先走内网 WebDAV；外网链接带 `via=external`，配置了反代地址时直接 302 到反代直链，由该地址自行校验登录，面板不再转发外网流量。
+- 在「设置 → 访问地址」配置面板的内网地址与反代地址后，直链会带上对应前缀；未配置时跟随当前访问面板的域名。
+
+WebDAV 账号密码保存在 `data/config.json`，不会下发到浏览器，但请注意保护数据目录。
+
+## 本地开发
+
+```bash
+pnpm install
+pnpm dev        # http://localhost:3000
+```
+
+生产构建：
+
+```bash
+pnpm build
+PORT=3000 node server.js
+```
+
+数据默认写到项目下的 `data/`，可用 `DATA_DIR` 指向其它位置。
+
+## 相关文档
+
+- [安装手册（Linux）](安装手册.md)
+- [更新日志](CHANGELOG.md)
+- [需求与变更记录](需求与变更记录.md)
+- [部署文档](docs/deployment.md)
+- [常见问题](docs/faq.md)
+
+## License
+
+基于开源项目 [navigation_panel](https://github.com/lichong-a/navigation_panel) 定制，遵循 MIT License。

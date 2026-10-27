@@ -4,24 +4,22 @@ import { isInitialized } from '@/lib/db'
 
 export async function POST(request: Request) {
   try {
-    // 检查是否已初始化
-    const initialized = await isInitialized()
-    if (initialized) {
-      return NextResponse.json({ success: false, error: 'Already initialized' }, { status: 400 })
+    if (await isInitialized()) {
+      return NextResponse.json({ error: '系统已初始化' }, { status: 400 })
     }
 
     const body = await request.json()
     const { username, password } = body
 
-    const result = await initializeAdmin(username, password)
+    const result = await initializeAdmin(String(username ?? ''), String(password ?? ''))
 
     if (!result.success) {
-      return NextResponse.json({ success: false, error: result.error }, { status: 400 })
+      return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ token: result.token, user: result.user })
   } catch (error) {
     console.error('Init error:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: '初始化失败' }, { status: 500 })
   }
 }

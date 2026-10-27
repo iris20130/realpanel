@@ -1,0 +1,18 @@
+Windows Registry Editor Version 5.00
+
+; 注册 rdp:// 协议：点击面板里的远程桌面地址时调用 mstsc 并自动填入主机
+; 只写入当前用户（HKCU），无需管理员权限；卸载请导入 disable-rdp-protocol.reg
+
+[HKEY_CURRENT_USER\Software\Classes\rdp]
+@="URL:RDP Protocol"
+"URL Protocol"=""
+
+[HKEY_CURRENT_USER\Software\Classes\rdp\DefaultIcon]
+@="%SystemRoot%\\System32\\mstsc.exe,0"
+
+[HKEY_CURRENT_USER\Software\Classes\rdp\shell]
+
+[HKEY_CURRENT_USER\Software\Classes\rdp\shell\open]
+
+[HKEY_CURRENT_USER\Software\Classes\rdp\shell\open\command]
+@="powershell.exe -NoProfile -WindowStyle Hidden -Command \"$u='%1';$u=$u -replace '^rdp://','';Start-Process mstsc -ArgumentList ('/v:'+$u)\""

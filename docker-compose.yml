@@ -1,25 +1,27 @@
 services:
-  ricpanel:
-    # Use pre-built image from Docker Hub (recommended)
-    image: lc1025082182/ricpanel:latest
-    # Or build locally:
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
-    container_name: ricpanel
+  realpanel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: realpanel:latest
+    container_name: realpanel
     restart: unless-stopped
     ports:
+      # 单端口：/ 面板，/login 登录注册，/setup 初始化，/admin 管理
       - "3000:3000"
     volumes:
-      # Persist data directory
+      # 数据全部外挂到宿主机 ./data，删容器不丢数据
+      # 用 NAS 路径时改成绝对路径，例如 /vol1/1000/docker/realpanel/data:/app/data
       - ./data:/app/data
     environment:
       - NODE_ENV=production
-      # Optional: Set timezone
+      - PORT=3000
+      # 数据目录固定指向外挂点，不要改容器内路径
+      - DATA_DIR=/app/data
       - TZ=Asia/Shanghai
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/api/setup/status"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s

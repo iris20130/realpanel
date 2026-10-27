@@ -4,11 +4,16 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Input, Button } from '@/components/ui'
+import { BrandMark } from '@/components/layout/BrandMark'
 import { api } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth'
+import { useBranding } from '@/lib/useBranding'
 import { Sparkles, Shield, ArrowRight, CheckCircle } from 'lucide-react'
 
 export default function SetupPage() {
   const router = useRouter()
+  const login = useAuthStore((state) => state.login)
+  const branding = useBranding()
   const [step, setStep] = useState(1)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -69,9 +74,10 @@ export default function SetupPage() {
 
     setLoading(true)
     try {
-      await api.initSetup(username, password)
+      const result = await api.initSetup(username, password)
+      login(result.token, result.user)
       setStep(4)
-      setTimeout(() => router.replace('/'), 2000)
+      setTimeout(() => router.replace('/'), 1500)
     } catch (err) {
       setError(err instanceof Error ? err.message : '初始化失败')
       setStep(3)
@@ -118,24 +124,20 @@ export default function SetupPage() {
         {/* Logo 和标题 */}
         <motion.div variants={itemVariants} className="text-center mb-12">
           <motion.div
-            initial={{ scale: 0, rotate: -180 }}
-            animate={{ scale: 1, rotate: 0 }}
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', duration: 0.8, delay: 0.2 }}
-            className="w-20 h-20 mx-auto mb-6 relative"
+            className="flex justify-center mb-6"
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)] via-purple-500 to-pink-500 rounded-2xl rotate-6 opacity-80" />
-            <div className="absolute inset-0 bg-gradient-to-br from-[var(--color-primary)] to-purple-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-[var(--color-primary)]/30">
-              <span className="text-white font-black text-3xl tracking-tight" style={{ fontFamily: 'system-ui' }}>N</span>
-            </div>
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-              className="absolute -inset-2 border-2 border-dashed border-[var(--color-primary)]/30 rounded-2xl"
+            <BrandMark
+              branding={branding}
+              imageClassName="h-10 brand-logo"
+              textClassName="text-3xl"
             />
           </motion.div>
 
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-white via-[var(--color-text)] to-[var(--color-text-muted)] bg-clip-text text-transparent mb-3">
-            欢迎使用 RicPanel
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-[var(--color-text)] via-[var(--color-text)] to-[var(--color-text-muted)] bg-clip-text text-transparent mb-3">
+            欢迎使用 {branding.text}
           </h1>
           <p className="text-base text-[var(--color-text-muted)] leading-relaxed">
             让我们开始设置您的个人导航面板
@@ -357,7 +359,7 @@ export default function SetupPage() {
           variants={itemVariants}
           className="text-center text-sm text-[var(--color-text-muted)] mt-8"
         >
-          RicPanel - 您的个人导航面板
+          {branding.text} - 您的内网导航面板
         </motion.p>
       </motion.div>
     </div>

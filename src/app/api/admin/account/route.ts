@@ -1,47 +1,34 @@
 import { NextResponse } from 'next/server'
-import { verifyAuth, updateAccount } from '@/lib/auth'
-import { readConfig } from '@/lib/db'
+import { updateAccount, verifyAuth } from '@/lib/auth'
 
-// 获取当前账户信息
 export async function GET(request: Request) {
   const user = await verifyAuth(request)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  try {
-    const config = await readConfig()
-    return NextResponse.json({ username: config.admin.username })
-  } catch (error) {
-    console.error('Get account error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  if (!user) return NextResponse.json({ error: '未登录' }, { status: 401 })
+  return NextResponse.json(user)
 }
 
-// 更新账户信息
 export async function PUT(request: Request) {
   const user = await verifyAuth(request)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  if (!user) return NextResponse.json({ error: '未登录' }, { status: 401 })
 
   try {
     const body = await request.json()
-    const { username, password } = body
+    const updates: { username?: string; password?: string } = {}
+    if (typeof body.username === 'string' && body.username.trim()) updates.username = body.username
+    if (typeof body.password === 'string' && body.password) updates.password = body.password
 
-    if (!username && !password) {
-      return NextResponse.json({ error: 'No updates provided' }, { status: 400 })
+    if (!updates.username && !updates.password) {
+      return NextResponse.json({ error: '没有需要更新的内容' }, { status: 400 })
     }
 
-    const result = await updateAccount(user.username, { username, password })
-
+    const result = await updateAccount(user.id, updates)
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, user: result.user, token: result.token })
   } catch (error) {
     console.error('Update account error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ error: '更新账户失败' }, { status: 500 })
   }
 }

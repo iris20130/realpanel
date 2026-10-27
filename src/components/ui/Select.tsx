@@ -101,7 +101,7 @@ export function Select({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.15 }}
-              className="absolute z-50 w-full mt-1 py-1 rounded-lg bg-[#1a1a2e] border border-[var(--color-border)] shadow-xl overflow-hidden"
+              className="absolute z-50 w-full mt-1 py-1 rounded-lg bg-[var(--color-elevated)] border border-[var(--color-border)] shadow-xl overflow-hidden max-h-64 overflow-y-auto"
             >
               {options.map((option) => (
                 <button
@@ -111,9 +111,9 @@ export function Select({
                   className={cn(
                     'w-full px-3 py-2 text-left flex items-center justify-between gap-2',
                     'transition-colors duration-150',
-                    'hover:bg-[var(--color-surface)]',
-                    option.value === value 
-                      ? 'text-[var(--color-primary)] bg-[var(--color-primary)]/10' 
+                    'hover:bg-[var(--color-surface-hover)]',
+                    option.value === value
+                      ? 'text-[var(--color-primary)] bg-[var(--color-primary)]/10'
                       : 'text-[var(--color-text)]'
                   )}
                 >
