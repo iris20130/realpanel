@@ -10,6 +10,14 @@
 
 本仓库是在个人内网场景下的定制分支，主要新增多用户体系、内外网地址分流、WebDAV 挂载、离线文件、SMB / RDP 打开方式等能力，实际部署方式为 **Linux 原生运行（Node.js standalone + systemd）**，不使用 Docker 构建。
 
+## 界面预览
+
+<img src="docs/images/panel-home.png" alt="面板首页：左侧栏分类导航、时钟、最近使用、搜索与分组卡片" width="100%">
+
+<img src="docs/images/settings.png" alt="设置：账户设置、用户管理、邀请码、访问地址、WebDAV 挂载、品牌设置" width="480">
+
+（截图为浅色主题 + 左侧栏分类布局，站点名称与成员信息已做模糊处理。）
+
 ## 功能
 
 | 分类 | 说明 |
