@@ -270,7 +270,9 @@ export function useNetwork(): {
   checked: boolean
   refresh: () => void
 } {
-  const mode = useSettingsStore((state) => state.networkMode)
+  const baseMode = useSettingsStore((state) => state.networkMode)
+  const allDisplay = useSettingsStore((state) => state.allDisplay)
+  const mode: NetworkMode = allDisplay ? 'all' : baseMode
   const sites = useSitesStore((state) => state.sites)
   const storedDetected = useNetworkStore((state) => state.detected)
   const storedIps = useNetworkStore((state) => state.deviceIps)

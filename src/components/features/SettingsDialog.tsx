@@ -5,6 +5,9 @@ import Image from 'next/image'
 import { Dialog, Input, Button, Select, Switch } from '@/components/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useUiStore } from '@/stores/ui'
+import { useSettingsStore, type BaseNetworkMode } from '@/stores/settings'
+import { usePrefsStore } from '@/stores/prefs'
+import { CUSTOM_ENGINE_ID, SEARCH_ENGINES } from '@/lib/searchEngines'
 import { api, type UserWithStats, type UploadedFile } from '@/lib/api'
 import { formatDateTime, cn } from '@/lib/utils'
 import type { Branding, InviteCode, PanelAccess, UserRole, WebDavConfig } from '@/types'
@@ -46,12 +49,49 @@ const DEFAULT_BRANDING: Branding = {
   logoUrl: '/brand/realpanel.svg',
   text: 'realpanel 导航面板',
   faviconUrl: '/favicon.svg',
+  wallpaperUrl: '',
 }
 
 export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const { token, user, login, setUser } = useAuthStore()
   const setViewingUser = useUiStore((state) => state.setViewingUser)
   const isAdmin = user?.role === 'admin'
+
+  const rememberNetwork = useSettingsStore((state) => state.rememberNetwork)
+  const networkDefault = useSettingsStore((state) => state.networkDefault)
+  const rememberAllDisplay = useSettingsStore((state) => state.rememberAllDisplay)
+  const allDisplayDefault = useSettingsStore((state) => state.allDisplayDefault)
+  const setRememberNetwork = useSettingsStore((state) => state.setRememberNetwork)
+  const setNetworkDefault = useSettingsStore((state) => state.setNetworkDefault)
+  const setRememberAllDisplay = useSettingsStore((state) => state.setRememberAllDisplay)
+  const setAllDisplayDefault = useSettingsStore((state) => state.setAllDisplayDefault)
+
+  const viewMode = usePrefsStore((state) => state.viewMode)
+  const layoutMode = usePrefsStore((state) => state.layoutMode)
+  const sidebarColor = usePrefsStore((state) => state.sidebarColor)
+  const wallpaperUrl = usePrefsStore((state) => state.wallpaperUrl)
+  const autoSort = usePrefsStore((state) => state.autoSort)
+  const searchEngineId = usePrefsStore((state) => state.searchEngineId)
+  const customEngineName = usePrefsStore((state) => state.customEngineName)
+  const customEnginePrefix = usePrefsStore((state) => state.customEnginePrefix)
+  const showRecent = usePrefsStore((state) => state.showRecent)
+  const recentLimit = usePrefsStore((state) => state.recentLimit)
+  const recentIconSize = usePrefsStore((state) => state.recentIconSize)
+  const recentFontSize = usePrefsStore((state) => state.recentFontSize)
+  const recentFontColor = usePrefsStore((state) => state.recentFontColor)
+  const setViewMode = usePrefsStore((state) => state.setViewMode)
+  const setLayoutMode = usePrefsStore((state) => state.setLayoutMode)
+  const setSidebarColor = usePrefsStore((state) => state.setSidebarColor)
+  const setWallpaperUrl = usePrefsStore((state) => state.setWallpaperUrl)
+  const setAutoSort = usePrefsStore((state) => state.setAutoSort)
+  const setSearchEngine = usePrefsStore((state) => state.setSearchEngine)
+  const setCustomEngine = usePrefsStore((state) => state.setCustomEngine)
+  const setShowRecent = usePrefsStore((state) => state.setShowRecent)
+  const setRecentLimit = usePrefsStore((state) => state.setRecentLimit)
+  const setRecentIconSize = usePrefsStore((state) => state.setRecentIconSize)
+  const setRecentFontSize = usePrefsStore((state) => state.setRecentFontSize)
+  const setRecentFontColor = usePrefsStore((state) => state.setRecentFontColor)
+  const clearUsage = usePrefsStore((state) => state.clearUsage)
 
   const [activeTab, setActiveTab] = useState<TabKey>('account')
 
@@ -104,11 +144,18 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const [brandingUploading, setBrandingUploading] = useState(false)
   const faviconFileRef = useRef<HTMLInputElement>(null)
   const [faviconUploading, setFaviconUploading] = useState(false)
+  const wallpaperFileRef = useRef<HTMLInputElement>(null)
+  const [wallpaperUploading, setWallpaperUploading] = useState(false)
   const [brandingError, setBrandingError] = useState('')
   const [brandingSuccess, setBrandingSuccess] = useState('')
   const [uploads, setUploads] = useState<UploadedFile[]>([])
   const [uploadsLoading, setUploadsLoading] = useState(false)
   const [deletingFile, setDeletingFile] = useState('')
+
+  // 用户自定义壁纸（仅本地浏览器）
+  const userWallpaperFileRef = useRef<HTMLInputElement>(null)
+  const [userWallpaperUploading, setUserWallpaperUploading] = useState(false)
+  const [userWallpaperError, setUserWallpaperError] = useState('')
 
   // WebDAV 挂载
   const emptyWebdav: WebDavConfig = {
@@ -561,6 +608,50 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
     }
   }
 
+  const handleBrandingWallpaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !token) return
+    setBrandingError('')
+    setBrandingSuccess('')
+    setWallpaperUploading(true)
+    try {
+      const result = (await api.admin.uploadIcon(token, file)) as {
+        url?: string
+        error?: string
+      }
+      if (!result.url) throw new Error(result.error || '上传失败')
+      setBranding((prev) => ({ ...prev, wallpaperUrl: result.url }))
+      setBrandingSuccess('壁纸已上传，点击保存后生效')
+      await loadUploads()
+    } catch (err) {
+      setBrandingError(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setWallpaperUploading(false)
+      if (wallpaperFileRef.current) wallpaperFileRef.current.value = ''
+    }
+  }
+
+  const handleUserWallpaperUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!token) {
+      setUserWallpaperError('未登录访客请直接填写图片链接')
+      e.target.value = ''
+      return
+    }
+    setUserWallpaperError('')
+    setUserWallpaperUploading(true)
+    try {
+      const result = await api.files.upload(token, file)
+      setWallpaperUrl(result.path)
+    } catch (err) {
+      setUserWallpaperError(err instanceof Error ? err.message : '上传失败')
+    } finally {
+      setUserWallpaperUploading(false)
+      if (userWallpaperFileRef.current) userWallpaperFileRef.current.value = ''
+    }
+  }
+
   const handleDeleteUpload = async (file: UploadedFile) => {
     if (!token) return
     if (!confirm(`确定删除图标「${file.filename}」？正在使用它的站点会显示为破图。`)) return
@@ -576,6 +667,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       }
       if (branding.faviconUrl === file.url) {
         setBranding((prev) => ({ ...prev, faviconUrl: DEFAULT_BRANDING.faviconUrl }))
+      }
+      if (branding.wallpaperUrl === file.url) {
+        setBranding((prev) => ({ ...prev, wallpaperUrl: '' }))
       }
       setBrandingSuccess('图标已删除')
     } catch (err) {
@@ -678,6 +772,7 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
 
       {/* 账户设置 */}
       {activeTab === 'account' && (
+        <div className="space-y-6">
         <form onSubmit={handleUpdateAccount} className="space-y-4">
           <div className="flex items-center gap-3 p-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-full bg-[var(--color-primary)]/20 text-[var(--color-primary)] flex items-center justify-center font-semibold">
@@ -726,6 +821,281 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
             </Button>
           </div>
         </form>
+
+        <div className="border-t border-[var(--color-border)] pt-5">
+          <h3 className="font-medium text-[var(--color-text)] mb-1">网络显示偏好</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mb-4">
+            仅影响当前浏览器。选择「记住上次状态」会保留顶部切换的内外网与全部显示设置。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="内网 / 外网状态"
+              value={rememberNetwork ? 'remember' : 'default'}
+              onChange={(e) => setRememberNetwork(e.target.value === 'remember')}
+              options={[
+                { value: 'remember', label: '记住上次状态' },
+                { value: 'default', label: '每次使用默认值' },
+              ]}
+            />
+            <Select
+              label="默认网络模式"
+              value={networkDefault}
+              onChange={(e) => setNetworkDefault(e.target.value as BaseNetworkMode)}
+              options={[
+                { value: 'auto', label: '自动识别' },
+                { value: 'intranet', label: '强制内网' },
+                { value: 'internet', label: '强制外网' },
+              ]}
+            />
+            <Select
+              label="全部显示"
+              value={rememberAllDisplay ? 'remember' : 'default'}
+              onChange={(e) => setRememberAllDisplay(e.target.value === 'remember')}
+              options={[
+                { value: 'remember', label: '记住上次状态' },
+                { value: 'default', label: '每次使用默认值' },
+              ]}
+            />
+            <div className="flex items-end pb-1">
+              <Switch
+                checked={allDisplayDefault}
+                onChange={setAllDisplayDefault}
+                label="默认开启全部显示"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] mt-3">
+            关闭「记住上次状态」后，下次打开面板会回到上面的默认网络模式与全部显示设置。
+          </p>
+        </div>
+
+        <div className="border-t border-[var(--color-border)] pt-5">
+          <h3 className="font-medium text-[var(--color-text)] mb-1">面板布局与侧边栏</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mb-4">
+            仅保存在当前浏览器。侧边栏布局顶部显示时间与搜索，卡片每行数量会按可用宽度自动适配。
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="面板布局"
+              value={layoutMode}
+              onChange={(e) => setLayoutMode(e.target.value as 'top' | 'sidebar')}
+              options={[
+                { value: 'top', label: '顶栏布局（原样）' },
+                { value: 'sidebar', label: '左侧栏分类布局' },
+              ]}
+            />
+            {layoutMode === 'sidebar' && (
+              <div>
+                <label className="block text-sm font-medium text-[var(--color-text-muted)] mb-1.5">
+                  侧边栏配色（同时作为面板主色调）
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={sidebarColor || '#6366f1'}
+                    onChange={(e) => setSidebarColor(e.target.value)}
+                    className="h-9 w-12 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5"
+                    aria-label="侧边栏配色"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSidebarColor('')}
+                    className="h-9"
+                  >
+                    使用默认配色
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+          {layoutMode === 'sidebar' && (
+            <p className="text-xs text-[var(--color-text-muted)] mt-3">
+              配色改动会同步影响按钮、选中态等主色调。
+            </p>
+          )}
+        </div>
+
+        <div className="border-t border-[var(--color-border)] pt-5">
+          <h3 className="font-medium text-[var(--color-text)] mb-1">壁纸</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            自定义壁纸只保存在当前浏览器；留空时使用管理员设置的默认壁纸，两者都没有时播放默认动态背景。
+          </p>
+          <div className="space-y-3">
+            <div
+              className="h-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] bg-cover bg-center"
+              style={wallpaperUrl ? { backgroundImage: `url("${wallpaperUrl}")` } : undefined}
+            >
+              {!wallpaperUrl && (
+                <div className="h-full flex items-center justify-center text-xs text-[var(--color-text-muted)]">
+                  未设置自定义壁纸
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => userWallpaperFileRef.current?.click()}
+                disabled={userWallpaperUploading || !token}
+                className="gap-1.5"
+                title={token ? '上传图片作为壁纸' : '未登录访客只能填写图片链接'}
+              >
+                <ImagePlus size={15} />
+                {userWallpaperUploading ? '上传中...' : '上传壁纸'}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setWallpaperUrl('')}
+                className="gap-1.5"
+              >
+                <RotateCcw size={15} />
+                跟随默认
+              </Button>
+              <input
+                ref={userWallpaperFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                onChange={handleUserWallpaperUpload}
+                className="hidden"
+              />
+            </div>
+            <Input
+              label="壁纸地址"
+              value={wallpaperUrl}
+              onChange={(e) => setWallpaperUrl(e.target.value)}
+              placeholder="图片链接，或使用上方上传"
+            />
+            {userWallpaperError && (
+              <p className="text-sm text-[var(--color-error)]">{userWallpaperError}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="border-t border-[var(--color-border)] pt-5">
+          <h3 className="font-medium text-[var(--color-text)] mb-1">视图、搜索与最近使用</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mb-4">
+            仅保存在当前浏览器；未登录访客的使用次数与最近记录也只会留在自己的浏览器里。
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Select
+              label="默认视图"
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value as 'grid' | 'compact')}
+              options={[
+                { value: 'grid', label: '卡片视图' },
+                { value: 'compact', label: '列表视图（小图标 + 名称）' },
+              ]}
+            />
+            <Select
+              label="搜索引擎（回车搜索用）"
+              value={searchEngineId}
+              onChange={(e) => setSearchEngine(e.target.value)}
+              options={[
+                ...SEARCH_ENGINES.map((engine) => ({ value: engine.id, label: engine.name })),
+                { value: CUSTOM_ENGINE_ID, label: '自定义' },
+              ]}
+            />
+            <div className="flex items-end pb-1">
+              <Switch
+                checked={autoSort}
+                onChange={setAutoSort}
+                label="按总使用次数自动排序（常用优先）"
+              />
+            </div>
+            <div className="flex items-end pb-1">
+              <Switch checked={showRecent} onChange={setShowRecent} label="显示最近使用一行" />
+            </div>
+          </div>
+
+          {searchEngineId === CUSTOM_ENGINE_ID && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 rounded-lg bg-[var(--color-surface)]/60 border border-[var(--color-border)]">
+              <Input
+                label="自定义搜索引擎名称"
+                value={customEngineName}
+                onChange={(e) => setCustomEngine(e.target.value, customEnginePrefix)}
+                placeholder="例如：公司知识库"
+              />
+              <Input
+                label="查询地址前缀"
+                value={customEnginePrefix}
+                onChange={(e) => setCustomEngine(customEngineName, e.target.value)}
+                placeholder="https://example.com/search?q= 或含 %s"
+              />
+              <p className="text-xs text-[var(--color-text-muted)] sm:col-span-2">
+                关键词会拼在前缀后面（自动编码）；前缀里写了 <code>%s</code> 时会替换到该位置。
+                常见写法：百度 <code>https://www.baidu.com/s?wd=</code>、必应{' '}
+                <code>https://cn.bing.com/search?q=</code>。
+              </p>
+            </div>
+          )}
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Input
+              label="最近使用显示数量（1-20）"
+              type="number"
+              min={1}
+              max={20}
+              value={recentLimit}
+              onChange={(e) => setRecentLimit(Number(e.target.value) || 1)}
+            />
+            <Input
+              label="最近使用图标大小（12-32）"
+              type="number"
+              min={12}
+              max={32}
+              value={recentIconSize}
+              onChange={(e) => setRecentIconSize(Number(e.target.value) || 16)}
+            />
+            <Input
+              label="最近使用字体大小（10-20）"
+              type="number"
+              min={10}
+              max={20}
+              value={recentFontSize}
+              onChange={(e) => setRecentFontSize(Number(e.target.value) || 12)}
+            />
+            <div>
+              <label className="block text-sm font-medium text-[var(--color-text-muted)] mb-1.5">
+                最近使用字体颜色
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={recentFontColor || '#6366f1'}
+                  onChange={(e) => setRecentFontColor(e.target.value)}
+                  className="h-9 w-12 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-0.5"
+                  aria-label="最近使用字体颜色"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRecentFontColor('')}
+                  className="h-9"
+                >
+                  跟随主题
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-end pb-1">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  if (confirm('清除当前浏览器里记录的使用次数与最近使用？')) clearUsage()
+                }}
+              >
+                清除使用记录
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] mt-3">
+            最近使用按打开时间倒序展示，只记录成功打开过的站点；在强制内网 / 外网模式下仅显示可访问的记录。
+          </p>
+        </div>
+        </div>
       )}
 
       {/* 用户管理 */}
@@ -1446,6 +1816,65 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                 value={branding.faviconUrl || ''}
                 onChange={(e) => setBranding((prev) => ({ ...prev, faviconUrl: e.target.value }))}
                 placeholder="/favicon.svg 或图片链接"
+              />
+            </div>
+
+            <div className="p-4 rounded-xl bg-[var(--color-surface)]/60 border border-[var(--color-border)] space-y-3">
+              <div>
+                <p className="text-sm font-medium text-[var(--color-text)]">默认壁纸</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  所有用户默认使用；用户可在个人设置里换成自己的壁纸。留空则播放默认动态背景。
+                </p>
+              </div>
+              <div
+                className="h-32 rounded-lg border border-[var(--color-border)] bg-[var(--color-background)] bg-cover bg-center"
+                style={
+                  branding.wallpaperUrl
+                    ? { backgroundImage: `url("${branding.wallpaperUrl}")` }
+                    : undefined
+                }
+              >
+                {!branding.wallpaperUrl && (
+                  <div className="h-full flex items-center justify-center text-xs text-[var(--color-text-muted)]">
+                    当前使用默认动态背景
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => wallpaperFileRef.current?.click()}
+                  disabled={wallpaperUploading}
+                  className="gap-1.5"
+                >
+                  <ImagePlus size={15} />
+                  {wallpaperUploading ? '上传中...' : '上传壁纸'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setBranding((prev) => ({ ...prev, wallpaperUrl: '' }))}
+                  className="gap-1.5"
+                >
+                  <RotateCcw size={15} />
+                  清除（用默认背景）
+                </Button>
+                <input
+                  ref={wallpaperFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                  onChange={handleBrandingWallpaperUpload}
+                  className="hidden"
+                />
+              </div>
+              <Input
+                label="壁纸地址"
+                value={branding.wallpaperUrl || ''}
+                onChange={(e) =>
+                  setBranding((prev) => ({ ...prev, wallpaperUrl: e.target.value }))
+                }
+                placeholder="图片链接，或使用上方上传"
               />
             </div>
 

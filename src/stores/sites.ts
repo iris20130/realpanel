@@ -36,10 +36,14 @@ export const useSitesStore = create<SitesState>((set) => ({
     groups: state.groups.map(g => g.id === id ? { ...g, ...updates } : g)
   })),
 
-  removeGroup: (id) => set((state) => ({
-    groups: state.groups.filter(g => g.id !== id),
-    sites: state.sites.filter(s => s.groupId !== id)
-  })),
+  removeGroup: (id) => set((state) => {
+    const childIds = state.groups.filter((g) => g.parentId === id).map((g) => g.id)
+    const removed = new Set([id, ...childIds])
+    return {
+      groups: state.groups.filter((g) => !removed.has(g.id)),
+      sites: state.sites.filter((s) => !removed.has(s.groupId)),
+    }
+  }),
 
   reorderGroups: (orders) => set((state) => {
     const orderMap = new Map(orders.map(o => [o.id, o.order]))

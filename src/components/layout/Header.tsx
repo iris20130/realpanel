@@ -31,7 +31,7 @@ export function Header({
 }) {
   const { mode, network, deviceIp, deviceIps, probing, detected } = useNetwork()
   const cycleNetworkMode = useSettingsStore((state) => state.cycleNetworkMode)
-  const setNetworkMode = useSettingsStore((state) => state.setNetworkMode)
+  const setAllDisplay = useSettingsStore((state) => state.setAllDisplay)
   const { user, logout } = useAuthStore()
   const { editing, setEditing, viewingUser, setViewingUser } = useUiStore()
   const themeMode = useThemeStore((state) => state.mode)
@@ -109,7 +109,7 @@ export function Header({
               <Button
                 variant={mode === 'all' ? 'primary' : 'ghost'}
                 size="sm"
-                onClick={() => setNetworkMode(mode === 'all' ? 'auto' : 'all')}
+                onClick={() => setAllDisplay(mode !== 'all')}
                 className="p-1.5 sm:p-2"
                 title={mode === 'all' ? '取消全部显示，恢复自动识别' : '全部显示（同时展示内网与外网链接）'}
               >

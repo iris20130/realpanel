@@ -14,6 +14,7 @@ interface SelectProps {
   required?: boolean
   className?: string
   placeholder?: string
+  disabled?: boolean
 }
 
 export function Select({ 
@@ -24,7 +25,8 @@ export function Select({
   error, 
   required, 
   className,
-  placeholder = '请选择'
+  placeholder = '请选择',
+  disabled = false
 }: SelectProps) {
   const id = React.useId()
   const [isOpen, setIsOpen] = React.useState(false)
@@ -68,11 +70,13 @@ export function Select({
         <button
           type="button"
           id={id}
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          disabled={disabled}
           className={cn(
             'w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border text-left',
             'flex items-center justify-between gap-2',
-            'transition-all duration-200 cursor-pointer',
+            'transition-all duration-200',
+            disabled ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer',
             isOpen 
               ? 'ring-2 ring-[var(--color-primary)] border-transparent' 
               : 'border-[var(--color-border)] hover:border-[var(--color-text-muted)]',
@@ -134,6 +138,7 @@ export function Select({
         value={value}
         onChange={onChange}
         required={required}
+        disabled={disabled}
         className="sr-only"
         tabIndex={-1}
       >

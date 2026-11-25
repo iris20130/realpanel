@@ -5,6 +5,7 @@ import type {
   BackupFile,
   Branding,
   Config,
+  GroupLayout,
   InviteCode,
   PanelAccess,
   Site,
@@ -26,6 +27,7 @@ const PANELS_DIR = path.join(DATA_DIR, 'panels')
 const UPLOADS_DIR = path.join(DATA_DIR, 'uploads')
 const FILES_DIR = path.join(DATA_DIR, 'files')
 const FILES_META_PATH = path.join(DATA_DIR, 'files.json')
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups')
 
 let dataDirReady = false
 let configCache: Config | null = null
@@ -50,6 +52,47 @@ async function ensureDataDir(): Promise<void> {
   await fs.mkdir(UPLOADS_DIR, { recursive: true })
   await fs.mkdir(FILES_DIR, { recursive: true })
   dataDirReady = true
+}
+
+// 新版本首次启动前把旧配置整体留一份快照；旧面板字段缺省时会自动兼容加载
+let upgradeSnapshot: Promise<void> | null = null
+function ensureUpgradeSnapshot(): Promise<void> {
+  if (upgradeSnapshot) return upgradeSnapshot
+  upgradeSnapshot = (async () => {
+    try {
+      await ensureDataDir()
+      const marker = path.join(DATA_DIR, '.layout-v2-backup')
+      try {
+        await fs.access(marker)
+        return
+      } catch {
+        // 尚未备份
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+      const dir = path.join(BACKUPS_DIR, `pre-layout-v2-${stamp}`)
+      await fs.mkdir(path.join(dir, 'panels'), { recursive: true })
+      for (const file of ['config.json', 'users.json', 'invites.json', 'sites.json', 'files.json']) {
+        try {
+          await fs.copyFile(path.join(DATA_DIR, file), path.join(dir, file))
+        } catch {
+          // 文件不存在时跳过
+        }
+      }
+      try {
+        const panels = await fs.readdir(PANELS_DIR)
+        for (const file of panels) {
+          if (!file.endsWith('.json')) continue
+          await fs.copyFile(path.join(PANELS_DIR, file), path.join(dir, 'panels', file))
+        }
+      } catch {
+        // 面板目录为空或不存在
+      }
+      await fs.writeFile(marker, String(Date.now()))
+    } catch (error) {
+      console.error('Pre-upgrade backup failed:', error)
+    }
+  })()
+  return upgradeSnapshot
 }
 
 async function writeJson(file: string, data: unknown): Promise<void> {
@@ -84,6 +127,7 @@ function getDefaultConfig(): Config {
 export async function readConfig(): Promise<Config> {
   if (configCache) return configCache
   await ensureDataDir()
+  await ensureUpgradeSnapshot()
   const parsed = await readJson<Config>(CONFIG_PATH)
   if (parsed) {
     configCache = parsed
@@ -138,6 +182,10 @@ export function normalizeBranding(raw: unknown): Branding {
       typeof source.faviconUrl === 'string' && source.faviconUrl.trim()
         ? source.faviconUrl.trim()
         : fallback.faviconUrl,
+    wallpaperUrl:
+      typeof source.wallpaperUrl === 'string' && source.wallpaperUrl.trim()
+        ? source.wallpaperUrl.trim()
+        : undefined,
   }
 }
 
@@ -215,6 +263,28 @@ function normalizeIcon(raw: unknown): SiteIcon {
   }
 }
 
+export function normalizeGroupIcon(raw: unknown): SiteIcon | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const icon = raw as Partial<SiteIcon>
+  if (typeof icon.value !== 'string' || !icon.value) return undefined
+  const type: SiteIcon['type'] =
+    icon.type === 'uploaded' || icon.type === 'favicon' ? icon.type : 'iconify'
+  return { type, value: icon.value }
+}
+
+export function normalizeGroupLayout(raw: unknown): GroupLayout | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const layout = raw as Record<string, unknown>
+  const cols = Number(layout.cols)
+  const rows = Number(layout.rows)
+  const result: GroupLayout = {
+    orientation: layout.orientation === 'vertical' ? 'vertical' : 'horizontal',
+  }
+  if (Number.isFinite(cols)) result.cols = Math.min(8, Math.max(1, Math.round(cols)))
+  if (Number.isFinite(rows)) result.rows = Math.min(8, Math.max(1, Math.round(rows)))
+  return result
+}
+
 export function normalizePanel(raw: unknown): SitesData {
   const source = (raw ?? {}) as { groups?: unknown; sites?: unknown }
   const groups = Array.isArray(source.groups)
@@ -226,14 +296,28 @@ export function normalizePanel(raw: unknown): SitesData {
             id: String(group.id),
             name: String(group.name),
             order: Number(group.order) || 0,
+            parentId:
+              typeof group.parentId === 'string' && group.parentId
+                ? String(group.parentId)
+                : undefined,
+            icon: normalizeGroupIcon(group.icon),
             visibility: normalizeVisibility(group.visibility),
             visibleUserIds: normalizeUserIds(group.visibleUserIds),
+            layout: normalizeGroupLayout(group.layout),
             createdAt: Number(group.createdAt) || Date.now(),
             updatedAt: Number(group.updatedAt) || Date.now(),
           }
         })
         .filter((item): item is NonNullable<typeof item> => item !== null)
     : []
+
+  // 只允许两级：上级必须是一级分组，找不到或指向二级分组的引用一律清空
+  const parentOf = new Map(groups.map((group) => [group.id, group.parentId]))
+  for (const group of groups) {
+    if (group.parentId && (!parentOf.has(group.parentId) || parentOf.get(group.parentId))) {
+      delete group.parentId
+    }
+  }
 
   const groupIds = new Set(groups.map((group) => group.id))
   const sites = Array.isArray(source.sites)
@@ -262,6 +346,10 @@ export function normalizePanel(raw: unknown): SitesData {
             notice:
               typeof site.notice === 'string' && site.notice.trim()
                 ? site.notice.trim().slice(0, 500)
+                : undefined,
+            launchTip:
+              typeof site.launchTip === 'string' && site.launchTip.trim()
+                ? site.launchTip.trim().slice(0, 500)
                 : undefined,
             icon: normalizeIcon(site.icon),
             externalUrl: externalUrl.trim() || undefined,

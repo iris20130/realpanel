@@ -15,6 +15,7 @@ interface SiteBody {
   title?: string
   description?: string
   notice?: string
+  launchTip?: string
   icon?: SiteIcon
   externalUrl?: string
   internalUrl?: string
@@ -67,6 +68,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
       if (body.description !== undefined) site.description = body.description.trim() || undefined
       if (body.notice !== undefined) site.notice = body.notice.trim().slice(0, 500) || undefined
+      if (body.launchTip !== undefined) {
+        site.launchTip = body.launchTip.trim().slice(0, 500) || undefined
+      }
       if (body.icon) site.icon = body.icon
       if (body.networkScope !== undefined) site.networkScope = normalizeScope(body.networkScope)
       if (body.openMode === 'current' || body.openMode === 'blank' || body.openMode === 'modal') {

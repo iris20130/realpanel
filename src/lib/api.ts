@@ -2,6 +2,7 @@ import type {
   BackupFile,
   Branding,
   Group,
+  GroupLayout,
   InviteCode,
   PanelAccess,
   PublicUser,
@@ -169,17 +170,27 @@ export const api = {
       token: string,
       name: string,
       visibility?: string,
-      visibleUserIds?: string[]
+      visibleUserIds?: string[],
+      layout?: GroupLayout,
+      parentId?: string | null,
+      icon?: SiteIcon | null
     ) =>
       request<Group>('/admin/groups', {
         method: 'POST',
-        body: { name, visibility, visibleUserIds },
+        body: { name, visibility, visibleUserIds, layout, parentId, icon },
         token,
       }),
     updateGroup: (
       token: string,
       id: string,
-      updates: { name: string; visibility?: string; visibleUserIds?: string[] }
+      updates: {
+        name: string
+        parentId?: string | null
+        visibility?: string
+        visibleUserIds?: string[]
+        layout?: GroupLayout | null
+        icon?: SiteIcon | null
+      }
     ) => request<Group>(`/admin/groups/${id}`, { method: 'PUT', body: updates, token }),
     deleteGroup: (token: string, id: string) =>
       request<{ success: boolean }>(`/admin/groups/${id}`, { method: 'DELETE', token }),

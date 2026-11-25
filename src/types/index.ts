@@ -33,13 +33,28 @@ export type VisibilityMode = 'public' | 'members' | 'users'
 // 链接可跟随所属分组
 export type SiteVisibility = 'inherit' | VisibilityMode
 
+// 分组内图标排列方向
+export type GroupOrientation = 'horizontal' | 'vertical'
+
+// 分组尺寸：cols/rows 为空表示默认自适应，设置后固定大小并与相邻分组对齐
+export interface GroupLayout {
+  cols?: number
+  rows?: number
+  orientation?: GroupOrientation
+}
+
 // 分组
 export interface Group {
   id: string
   name: string
   order: number
+  // 上级分组：有值时该分组作为二级分组，侧边栏布局里显示在上级分类下
+  parentId?: string | null
+  // 分组图标：一级分组显示在侧边栏分类上，留空则用分组内第一个网站的图标
+  icon?: SiteIcon
   visibility?: VisibilityMode
   visibleUserIds?: string[]
+  layout?: GroupLayout
   createdAt: number
   updatedAt: number
 }
@@ -67,6 +82,8 @@ export interface Site {
   description?: string
   // 点击卡片时在页面中间弹出的自定义提示
   notice?: string
+  // 调用系统程序（远程桌面 / SMB 共享）后弹出的提示文字，留空用默认文案
+  launchTip?: string
   icon: SiteIcon
   externalUrl?: string
   internalUrl?: string
@@ -115,6 +132,8 @@ export interface Branding {
   text: string
   // 浏览器标签页图标，空则用内置 favicon.svg
   faviconUrl?: string
+  // 面板默认壁纸，空则使用默认动态背景
+  wallpaperUrl?: string
 }
 
 // 面板自身访问地址：离线文件、WebDAV 选中的文件按这两个前缀生成内外网链接

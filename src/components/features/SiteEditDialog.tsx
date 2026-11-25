@@ -37,6 +37,7 @@ interface FormState {
   title: string
   description: string
   notice: string
+  launchTip: string
   icon: SiteIcon
   externalUrl: string
   internalUrl: string
@@ -53,6 +54,7 @@ const emptyForm = (groupId = ''): FormState => ({
   title: '',
   description: '',
   notice: '',
+  launchTip: '',
   icon: { type: 'iconify', value: 'mdi:link' },
   externalUrl: '',
   internalUrl: '',
@@ -149,6 +151,7 @@ export function SiteEditDialog({ open, onClose, site, initialGroupId, onSave }: 
         title: site.title,
         description: site.description || '',
         notice: site.notice || '',
+        launchTip: site.launchTip || '',
         icon: site.icon,
         externalUrl: site.externalUrl || '',
         internalUrl: site.internalUrl || '',
@@ -333,6 +336,7 @@ export function SiteEditDialog({ open, onClose, site, initialGroupId, onSave }: 
         title: formData.title.trim(),
         description: formData.description.trim(),
         notice: formData.notice.trim(),
+        launchTip: formData.launchTip.trim(),
         icon: formData.icon,
         externalUrl,
         internalUrl,
@@ -422,6 +426,26 @@ export function SiteEditDialog({ open, onClose, site, initialGroupId, onSave }: 
           />
           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
             填写后点击卡片会先弹出这段文字，点「确认打开」后才打开网站或下载文件，可用来写账号密码或使用说明
+          </p>
+        </div>
+
+        <div>
+          <label
+            htmlFor="site-launch-tip"
+            className="block text-sm font-medium text-[var(--color-text-muted)] mb-1.5"
+          >
+            启动提示文字
+          </label>
+          <textarea
+            id="site-launch-tip"
+            rows={3}
+            value={formData.launchTip}
+            onChange={(e) => update('launchTip', e.target.value)}
+            placeholder="留空则显示默认提示。例如：正在连接公司电脑，账号 administrator，密码 xxx"
+            className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text)] placeholder-[var(--color-text-muted)] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent resize-y"
+          />
+          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            远程桌面（rdp://）或 SMB 共享等调用系统程序的站点，点击后弹出的提示内容由这里决定；留空使用默认文案
           </p>
         </div>
 

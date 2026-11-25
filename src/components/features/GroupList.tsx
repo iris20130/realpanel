@@ -30,12 +30,16 @@ import { useSitesStore } from '@/stores/sites'
 import { useUiStore } from '@/stores/ui'
 import { useSiteAccessor } from '@/lib/siteAccess'
 import { api } from '@/lib/api'
+import {
+  GROUP_VERTICAL_ROWS,
+  clampGroupCols,
+  groupFixedHeight,
+} from '@/lib/groupLayout'
 import { cn } from '@/lib/utils'
-import type { Group, Site, VisibilityMode } from '@/types'
+import type { Group, GroupLayout, Site, SiteIcon, VisibilityMode } from '@/types'
 import { Plus, Network, PanelLeft, X } from 'lucide-react'
 
 const DROP_PREFIX = 'group-drop-'
-const MAX_ROW_ICONS = 8
 
 // 把 active 站点移动到目标分组的目标位置，并重排涉及分组内的 order
 function applyMove(
@@ -95,7 +99,21 @@ function useIsWide() {
   return isWide
 }
 
-export function GroupList() {
+interface GroupListProps {
+  /** 侧边栏布局下只显示该分类及其子分组；'all' 或未传时显示全部 */
+  categoryId?: string
+  /** 内容区可用宽度对应的一行最多图标数 */
+  maxColumns?: number
+  /** 侧边栏布局已提供分类入口时，移动端不再重复显示分组抽屉 */
+  hideMobilePicker?: boolean
+}
+
+export function GroupList({
+  categoryId = 'all',
+  maxColumns = 8,
+  hideMobilePicker = false,
+}: GroupListProps) {
+  const MAX_ROW_ICONS = maxColumns
   const { token } = useAuthStore()
   const { groups, sites, addGroup, reorderGroups, reorderSites } = useSitesStore()
   const { editing, viewOnly, viewingUser, setEditing } = useUiStore()
@@ -109,6 +127,7 @@ export function GroupList() {
   const [mobileGroupId, setMobileGroupId] = useState<string>('all')
 
   const canEdit = editing && Boolean(token) && !viewingUser && !viewOnly
+  const DEFAULT_PARENT = categoryId === 'all' ? null : categoryId
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -128,11 +147,14 @@ export function GroupList() {
 
   const displayGroups = useMemo(() => {
     const source = localGroups.length > 0 ? localGroups : sortedGroups
-    if (canEdit) return source
-    return source.filter((group) =>
+    const inCategory = (group: Group) =>
+      categoryId === 'all' || group.id === categoryId || group.parentId === categoryId
+    const scoped = source.filter(inCategory)
+    if (canEdit) return scoped
+    return scoped.filter((group) =>
       sites.some((site) => site.groupId === group.id && site.enabled && isVisible(site))
     )
-  }, [localGroups, sortedGroups, canEdit, sites, isVisible])
+  }, [localGroups, sortedGroups, canEdit, sites, isVisible, categoryId])
 
   const siteSource = localSites.length > 0 ? localSites : sites
 
@@ -149,21 +171,26 @@ export function GroupList() {
     return map
   }, [displayGroups, siteSource, canEdit, isVisible])
 
-  // 相邻分组图标数合计不超过 MAX_ROW_ICONS 就放在同一排，超过则换排
+  // 默认按图标数合并同排；手动拉伸过的分组用固定列数参与排布
   const rows = useMemo(() => {
-    const result: { id: string; span: number }[][] = []
+    const result: { id: string; span: number; rows?: number }[][] = []
     for (const group of displayGroups) {
-      const span = Math.min(Math.max(groupCounts.get(group.id) ?? 0, 1), MAX_ROW_ICONS)
+      const count = Math.max(groupCounts.get(group.id) ?? 0, 1)
+      const autoSpan =
+        group.layout?.orientation === 'vertical'
+          ? Math.min(Math.ceil(count / GROUP_VERTICAL_ROWS), MAX_ROW_ICONS)
+          : Math.min(count, MAX_ROW_ICONS)
+      const span = group.layout?.cols ? clampGroupCols(group.layout.cols) : autoSpan
       const current = result[result.length - 1]
       const used = current?.reduce((sum, item) => sum + item.span, 0) ?? 0
       if (!current || used + span > MAX_ROW_ICONS) {
-        result.push([{ id: group.id, span }])
+        result.push([{ id: group.id, span, rows: group.layout?.rows }])
       } else {
-        current.push({ id: group.id, span })
+        current.push({ id: group.id, span, rows: group.layout?.rows })
       }
     }
     return result
-  }, [displayGroups, groupCounts])
+  }, [displayGroups, groupCounts, MAX_ROW_ICONS])
 
   const groupMap = useMemo(
     () => new Map(displayGroups.map((group) => [group.id, group])),
@@ -322,10 +349,21 @@ export function GroupList() {
   const handleAddGroup = async (
     name: string,
     visibility: VisibilityMode,
-    visibleUserIds: string[]
+    visibleUserIds: string[],
+    layout?: GroupLayout,
+    parentId?: string | null,
+    icon?: SiteIcon | null
   ) => {
     if (!token) return
-    const newGroup = await api.admin.createGroup(token, name, visibility, visibleUserIds)
+    const newGroup = await api.admin.createGroup(
+      token,
+      name,
+      visibility,
+      visibleUserIds,
+      layout,
+      parentId,
+      icon
+    )
     addGroup(newGroup as Group)
     setShowAddGroup(false)
   }
@@ -345,6 +383,8 @@ export function GroupList() {
         <GroupEditDialog
           open={showAddGroup}
           onClose={() => setShowAddGroup(false)}
+          groups={groups}
+          defaultParentId={DEFAULT_PARENT}
           onSave={handleAddGroup}
         />
       </div>
@@ -379,6 +419,8 @@ export function GroupList() {
         <GroupEditDialog
           open={showAddGroup}
           onClose={() => setShowAddGroup(false)}
+          groups={groups}
+          defaultParentId={DEFAULT_PARENT}
           onSave={handleAddGroup}
         />
       </div>
@@ -392,19 +434,29 @@ export function GroupList() {
       {rows.map((row) => (
         <div
           key={row.map((item) => item.id).join('-')}
-          className="grid gap-4"
+          data-group-row
+          className="grid gap-4 items-stretch"
           style={{ gridTemplateColumns: `repeat(${MAX_ROW_ICONS}, minmax(0, 1fr))` }}
         >
           {row.map((item) => {
             const group = groupMap.get(item.id)
             if (!group) return null
+            const fixedHeight = groupFixedHeight(item.rows)
             return (
-              <div key={group.id} style={{ gridColumn: `span ${item.span}` }} className="min-w-0">
+              <div
+                key={group.id}
+                style={{
+                  gridColumn: `span ${item.span}`,
+                  ...(fixedHeight ? { minHeight: fixedHeight } : {}),
+                }}
+                className="min-w-0 h-full"
+              >
                 <GroupItem
                   group={group}
                   sites={siteSource}
                   index={groupIndex.get(group.id) ?? 0}
                   columns={item.span}
+                  resizable={canEdit}
                 />
               </div>
             )
@@ -416,20 +468,22 @@ export function GroupList() {
 
   const mobileLayout = (
     <>
-      <div className="mb-4 flex items-center gap-3">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setDrawerOpen(true)}
-          className="gap-2 shrink-0"
-        >
-          <PanelLeft size={16} />
-          分组
-        </Button>
-        <span className="text-sm text-[var(--color-text-muted)] truncate">
-          {mobileGroup ? mobileGroup.name : '全部显示'}
-        </span>
-      </div>
+      {!hideMobilePicker && (
+        <div className="mb-4 flex items-center gap-3">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setDrawerOpen(true)}
+            className="gap-2 shrink-0"
+          >
+            <PanelLeft size={16} />
+            分组
+          </Button>
+          <span className="text-sm text-[var(--color-text-muted)] truncate">
+            {mobileGroup ? mobileGroup.name : '全部显示'}
+          </span>
+        </div>
+      )}
 
       <div className="space-y-6">
         {(mobileGroup ? [mobileGroup] : displayGroups).map((group) => (
@@ -495,7 +549,7 @@ export function GroupList() {
         </div>
       )}
 
-      {!isWide && drawerOpen && (
+      {!isWide && !hideMobilePicker && drawerOpen && (
         <div className="fixed inset-0 z-[60] lg:hidden">
           <div
             className="absolute inset-0 bg-black/50 backdrop-blur-sm"
@@ -559,6 +613,8 @@ export function GroupList() {
       <GroupEditDialog
         open={showAddGroup}
         onClose={() => setShowAddGroup(false)}
+        groups={groups}
+        defaultParentId={DEFAULT_PARENT}
         onSave={handleAddGroup}
       />
     </>

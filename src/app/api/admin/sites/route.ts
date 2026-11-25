@@ -11,6 +11,7 @@ interface SiteBody {
   title?: string
   description?: string
   notice?: string
+  launchTip?: string
   icon?: SiteIcon
   externalUrl?: string
   internalUrl?: string
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
         title,
         description: body.description?.trim() || undefined,
         notice: body.notice?.trim().slice(0, 500) || undefined,
+        launchTip: body.launchTip?.trim().slice(0, 500) || undefined,
         icon: body.icon ?? { type: 'iconify', value: 'mdi:web' },
         externalUrl,
         internalUrl,
