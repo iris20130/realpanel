@@ -105,8 +105,20 @@ async function writeJson(file: string, data: unknown): Promise<void> {
 async function readJson<T>(file: string): Promise<T | null> {
   try {
     return JSON.parse(await fs.readFile(file, 'utf-8')) as T
-  } catch {
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+      console.error(`读取 ${file} 失败:`, error)
+    }
     return null
+  }
+}
+
+async function absFileExists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -432,7 +444,12 @@ export async function readUsers(): Promise<User[]> {
   await migrateLegacy()
   if (usersCache) return usersCache
   const parsed = await readJson<{ users?: User[] }>(USERS_PATH)
-  usersCache = Array.isArray(parsed?.users) ? parsed!.users : []
+  if (!parsed) {
+    // 读取失败时不缓存空用户表，避免所有账号被当成不存在
+    if (!(await absFileExists(USERS_PATH))) usersCache = []
+    return []
+  }
+  usersCache = Array.isArray(parsed.users) ? parsed.users : []
   return usersCache
 }
 
@@ -500,8 +517,18 @@ export async function readPanel(userId: string): Promise<SitesData> {
   if (cached) return cached
 
   await ensureDataDir()
-  const parsed = await readJson<unknown>(panelPath(userId))
-  const panel = parsed ? normalizePanel(parsed) : emptyPanel()
+  const file = panelPath(userId)
+  const parsed = await readJson<unknown>(file)
+  if (!parsed) {
+    // 只有文件确实不存在才缓存空面板；读取/解析失败时不缓存，避免一次抖动直到重启都返回空面板
+    if (!(await absFileExists(file))) {
+      const empty = emptyPanel()
+      panelCache.set(userId, empty)
+      return empty
+    }
+    return emptyPanel()
+  }
+  const panel = normalizePanel(parsed)
   panelCache.set(userId, panel)
   return panel
 }

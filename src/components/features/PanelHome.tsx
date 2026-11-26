@@ -210,8 +210,9 @@ export function PanelHome({ adminMode }: { adminMode: boolean }) {
         >
           {!adminMode && adminName && (
             <p className="mb-5 text-sm text-[var(--color-text-muted)]">
-              {adminName} 的导航面板
-              {viewerName ? ` · 当前成员：${viewerName}` : ' · 未登录仅显示公开内容'}
+              {viewerName && viewerName !== adminName
+                ? `${adminName} 的导航面板 · 当前成员：${viewerName}`
+                : `${adminName} 的导航面板${viewerName ? '' : ' · 未登录仅显示公开内容'}`}
             </p>
           )}
 
